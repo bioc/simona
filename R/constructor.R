@@ -7,6 +7,7 @@
 #' 
 #' @slot terms A character vector of length `n` of all term names. Other slots that store term-level information use the integer indices of terms.
 #' @slot n_terms An integer scalar of the total number of terms in the DAG.
+#' @slot n_relations An integer scalar of the total number of relations in the DAG.
 #' @slot lt_parents A list of length `n`. Each element in the list is an integer index vector of the parent terms of the i^th term.
 #' @slot lt_children A list of length `n`. Each element in the list is an integer index vector of the child terms of the i^th term.
 #' @slot lt_children_relations A list of length `n`. Each element is a vector of the semantic relations between the i^th term and its child terms, e.g. a child "is_a" parent.
@@ -36,6 +37,7 @@
 ontology_DAG = setClass("ontology_DAG",
 	slots = c("terms" = "character",
 		      "n_terms" = "integer",
+		      "n_relations" = "integer",
 		      "lt_parents" = "list",
 		      "lt_children" = "list",
 		      "lt_children_relations" = "list",
@@ -110,7 +112,12 @@ create_ontology_DAG = function(parents, children, relations = NULL, relations_DA
 	verbose = simona_opt$verbose) {
 
 	if(missing(children)) {
-		lt = strsplit(parents, "\\s*-\\s*")
+		if(any(grepl("\\s+-\\s+", parents))) {
+			lt = strsplit(parents, "\\s+-\\s+")
+		} else {
+			lt = strsplit(parents, "\\s*-\\s*")
+		}
+		
 		parents = sapply(lt, function(x) x[1])
 		children = sapply(lt, function(x) x[2])
 	}
@@ -178,7 +185,7 @@ create_ontology_DAG = function(parents, children, relations = NULL, relations_DA
 		if(length(root) > 5) {
 			txt = strwrap(paste(terms[root][seq_len(5)], collapse = ", "), width = 80)
 			txt[length(txt)] = paste0(txt[length(txt)], ",")
-			txt = c(txt, qq("  and other @{length(root)-5} terms ..."))
+			txt = c(txt, qq("  and other @{length(root)-5} term@{ifelse(length(root)-5 == 1, '', 's')} ..."))
 		} else {
 			txt = strwrap(paste(terms[root], collapse = ", "), width = 80)
 		}
@@ -209,6 +216,7 @@ create_ontology_DAG = function(parents, children, relations = NULL, relations_DA
 	dag = ontology_DAG(
 		terms = terms,
 		n_terms = length(terms),
+		n_relations = sum(vapply(lt_children, length, FUN.VALUE = integer(1))),
 		lt_parents = lt_parents,
 		lt_children = lt_children,
 		lt_children_relations = lt_relations, 
@@ -344,7 +352,7 @@ setMethod("show",
 	definition = function(object) {
 
 		n_terms = object@n_terms
-		n_relations = sum(vapply(object@lt_children, length, FUN.VALUE = integer(1)))
+		n_relations = object@n_relations
 
 		cat("An ontology_DAG object:\n")
 		cat("  Source:", object@source, "\n")
@@ -369,8 +377,9 @@ setMethod("show",
 			cat("  Aspect ratio: ", object@aspect_ratio[1], ":1\n", sep = "")
 		} else {
 			cat("  Avg number of parents: ", sprintf("%.2f", mean(n_parents(object)[-dag_root(object, in_labels = FALSE)])), "\n", sep = "")
-			cat("  Aspect ratio: ", object@aspect_ratio[1], ":1 (based on the longest distance to root)\n", sep = "")
-			cat("                ", object@aspect_ratio[2], ":1 (based on the shortest distance to root)\n", sep = "")
+			cat("  Avg number of children: ", sprintf("%.2f", mean(n_parents(object)[-dag_leaves(object, in_labels = FALSE)])), "\n", sep = "")
+			cat("  Aspect ratio: ", object@aspect_ratio[1], ":1 (based on the longest distance from root)\n", sep = "")
+			cat("                ", object@aspect_ratio[2], ":1 (based on the shortest distance from root)\n", sep = "")
 		}
 
 		if(length(object@lt_children_relations)) {
@@ -482,8 +491,9 @@ create_ontology_DAG_from_GO_db = function(namespace = "BP", relations = "part of
 
 	relations_DAG = create_ontology_DAG(c("regulates", "regulates"), c("negatively regulates", "positively regulates"))
 
+	go_db_version = read.dcf(system.file("DESCRIPTION", package = "GO.db"))[1, "Version"]
 	dag = create_ontology_DAG(parents = df[, 2], children = df[, 1], relations = df[, 3], relations_DAG = relations_DAG,
-		annotation = annotation, source = paste0("GO ", namespace, " / GO.db package"))
+		annotation = annotation, source = paste0("GO ", namespace, " / GO.db package ", go_db_version))
 
 	go = GO.db::GOTERM[dag@terms]
 	meta = data.frame(id = AnnotationDbi::GOID(go),
@@ -495,134 +505,6 @@ create_ontology_DAG_from_GO_db = function(namespace = "BP", relations = "part of
 
 	dag
 }
-
-
-#' Create sub-DAGs
-#' 
-#' @param x An `ontology_DAG` object.
-#' @param i A single term name. The value should be a character vector. It corresponds to the roots.
-#' @param j A single term name. The value should be a character vector. It corresponds to the leaves.
-#' @param ... Ignored.
-#' @param drop Ignored.
-#' 
-#' @details It returns a sub-DAG taking node `i` as the root and `j` as the leaves. If `i` is a vector, a super root will be added.
-#' @return An `ontology_DAG` object.
-#' 
-#' @rdname subset
-#' @exportMethod [
-#' @examples
-#' parents  = c("a", "a", "b", "b", "c", "d")
-#' children = c("b", "c", "c", "d", "e", "f")
-#' dag = create_ontology_DAG(parents, children)
-#' dag["b"]
-#' dag[["b"]]
-#' dag["b", "f"]
-#' dag[, "f"]
-setMethod("[", 
-	signature = c("ontology_DAG", i = "ANY", j = "ANY", drop = "missing"),
-	definition = function(x, i, j, ..., drop = FALSE) {
-
-	if(!is.character(i)) {
-		stop("Only the character term name should be used as index.")
-	}
-
-	if(!is.character(j)) {
-		stop("Only the character term name should be used as index.")
-	}
-	
-	dag_filter(x, root = i, leaves = j)
-	
-})
-
-
-#' @rdname subset
-#' @exportMethod [
-setMethod("[", 
-	signature = c("ontology_DAG", i = "ANY", j = "ANY", drop = "ANY"),
-	definition = function(x, i, j, ..., drop = FALSE) {
-
-	x[i, j]
-	
-})
-
-
-#' @rdname subset
-#' @exportMethod [
-setMethod("[", 
-	signature = c("ontology_DAG", i = "ANY", j = "missing", drop = "missing"),
-	definition = function(x, i, j, ..., drop = FALSE) {
-
-	if(!is.character(i)) {
-		stop("Only the character term name should be used as index.")
-	}
-
-	dag_filter(x, root = i)
-})
-
-#' @rdname subset
-#' @exportMethod [
-setMethod("[", 
-	signature = c("ontology_DAG", i = "ANY", j = "missing", drop = "ANY"),
-	definition = function(x, i, j, ..., drop = FALSE) {
-
-	x[i]
-})
-
-#' @rdname subset
-#' @exportMethod [
-setMethod("[", 
-	signature = c("ontology_DAG", i = "missing", j = "ANY", drop = "missing"),
-	definition = function(x, i, j, ..., drop = FALSE) {
-
-	if(!is.character(j)) {
-		stop("Only the character term name should be used as index.")
-	}
-
-	dag_filter(x, leaves = j)
-
-})
-
-#' @rdname subset
-#' @exportMethod [
-setMethod("[", 
-	signature = c("ontology_DAG", i = "missing", j = "ANY", drop = "ANY"),
-	definition = function(x, i, j, ..., drop = FALSE) {
-
-	x[, j]
-
-})
-
-#' @rdname subset
-#' @exportMethod [
-setMethod("[", 
-	signature = c("ontology_DAG", i = "missing", j = "missing", drop = "missing"),
-	definition = function(x, i, j, ..., drop = FALSE) {
-
-	x
-	
-})
-
-#' @rdname subset
-#' @exportMethod [
-setMethod("[", 
-	signature = c("ontology_DAG", i = "missing", j = "missing", drop = "ANY"),
-	definition = function(x, i, j, ..., drop = FALSE) {
-
-	x
-	
-})
-
-#' @rdname subset
-#' @exportMethod [[
-setMethod("[[", 
-	signature = c("ontology_DAG", "character", "missing"),
-	definition = function(x, i, j, ...) {
-
-	if(!is.character(i)) {
-		stop("Only the character term name should be used as index.")
-	}
-	dag_filter(x, root = i)
-})
 
 #' Names of all terms
 #' 
@@ -645,6 +527,18 @@ dag_all_terms = function(dag) {
 #' @export
 dag_n_terms = function(dag) {
 	dag@n_terms
+}
+
+#' @rdname dag_all_terms
+#' @export
+dag_n_relations = function(dag) {
+	sum(sapply(dag@lt_children, length))
+}
+
+#' @rdname dag_all_terms
+#' @export
+dag_n_leaves = function(dag) {
+	length(dag@leaves)
 }
 
 #' Root or leaves of the DAG
@@ -727,139 +621,6 @@ dag_as_igraph = function(dag) {
 	g
 }
 
-#' Filter the DAG
-#' 
-#' @param dag An `ontology_DAG` object.
-#' @param terms A vector of term names. The sub-DAG will only contain these terms.
-#' @param relations A vector of relations. The sub-DAG will only contain these relations. 
-#'                  Valid values of "relations" should correspond to the values set in the 
-#'                  `relations` argument in the [`create_ontology_DAG()`]. If `relations_DAG` is 
-#'                  already provided, offspring relation types will all be selected. Note "is_a"
-#'                  is always included.
-#' @param root A vector of term names which will be used as roots of the sub-DAG. Only 
-#'             these with their offspring terms will be kept. If there are multiple root terms, 
-#'             a super root will be automatically added.
-#' @param leaves A vector of leaf terms. Only these with their ancestor terms will be kept.
-#' @param mcols_filter Filtering on columns in the meta data frame.
-#' 
-#' @details If the DAG is reduced into several disconnected parts after the filtering, a
-#'          super root is automatically added.
-#' 
-#' @return An `ontology_DAG` object.
-#' @export
-#' @examples
-#' parents  = c("a", "a", "b", "b", "c", "d")
-#' children = c("b", "c", "c", "d", "e", "f")
-#' dag = create_ontology_DAG(parents, children)
-#' dag_filter(dag, terms = c("b", "d", "f"))
-#' dag_filter(dag, root = "b")
-#' dag_filter(dag, leaves = c("c", "b"))
-#' dag_filter(dag, root = "b", leaves = "e")
-#' 
-#' \donttest{
-#' dag = create_ontology_DAG_from_GO_db()
-#' dag_filter(dag, relations = "is_a")
-#' }
-dag_filter = function(dag, terms = NULL, relations = NULL, root = NULL, leaves = NULL,
-	mcols_filter = NULL) {
-
-	lt_children = dag@lt_children
-	children = unlist(lt_children)
-	parents = rep(seq_along(dag@terms), times = vapply(lt_children, length, FUN.VALUE = integer(1)))
-	if(length(dag@lt_children_relations) > 0) {
-		relation_levels = attr(dag@lt_children_relations, "levels")
-		v_relations = unlist(dag@lt_children_relations)
-		v_relations = relation_levels[v_relations]
-	} else {
-		v_relations = NULL
-	}
-
-	if(length(dag@annotation$list) > 0) {
-		annotation = lapply(dag@annotation$list, function(x) {
-			dag@annotation$names[x]
-		})
-		names(annotation) = dag@terms
-	} else {
-		annotation = NULL
-	}
-
-	l = rep(TRUE, length(parents))
-
-	if(!is.null(terms)) {
-		terms = term_to_node_id(dag, terms)
-		l = l & parents %in% terms & children %in% terms
-	}
-
-	if(!is.null(relations)) {
-
-		relations = normalize_relation_type(relations)
-		if(!"is_a" %in% relations) {
-			stop("'is_a' must be included.")
-		}
-
-		if(!is.null(dag@relations_DAG)) {
-			relations = merge_offspring_relation_types(dag@relations_DAG, relations)
-		}
-
-		if(!is.null(v_relations)) {
-			l2 = v_relations %in% relations
-			if(!any(l2)) {
-				stop("Cannot find any relation.")
-			}
-			l = l & l2
-		}
-	}
-
-	if(!is.null(root)) {
-		offspring = dag_offspring(dag, root, FALSE)
-		offspring = c(offspring, which(dag@terms %in% root))
-		l = l & (parents %in% offspring & children %in% offspring)
-	}
-
-	if(!is.null(leaves)) {
-		ancestors = dag_ancestors(dag, leaves, FALSE)
-		ancestors = c(ancestors, which(dag@terms %in% leaves))
-		l = l & (parents %in% ancestors & children %in% ancestors)
-	}
-
-	## filter in mcols
-	df = mcols(dag)
-	if(!is.null(df)) {
-		l2 = eval(substitute(mcols_filter), envir = df)
-		if(!is.null(l2)) {
-			l2[is.na(l2)] = FALSE
-			if(!is.null(l2)) {
-				l = l & l2
-			}
-		}
-	}
-
-	parents = parents[l]
-	children = children[l]
-	if(!is.null(v_relations)) {
-		v_relations = v_relations[l]
-	}
-
-	parents = dag@terms[parents]
-	children = dag@terms[children]
-
-	all_terms = unique(c(parents, children))
-	if(!is.null(annotation)) {
-		annotation = annotation[all_terms]
-	}
-
-	dag2 = create_ontology_DAG(parents = parents, children = children,
-		relations = v_relations, relations_DAG = dag@relations_DAG, 
-		annotation = annotation, source = dag@source)
-
-	meta = mcols(dag)
-	if(!is.null(meta)) {
-		mcols(dag2) = meta[dag2@terms, , drop = FALSE]
-	}
-
-	dag2
-}
-
 
 #' Get or set meta columns on DAG
 #' 
@@ -927,4 +688,19 @@ dag_namespaces = function(dag) {
 	unique(df$namespace)
 }
 
+#' Create the ontology_DAG object from the igraph object
+#' 
+#' @param g An [`igraph::igraph`] object.
+#' @param relations A vector of relation types. The length of the vector should be the same as the number of edges in `g`.
+#' @param verbose Whether to print messages.
+#' 
+#' @return An `ontology_DAG` object.
+#' @export
+#' @import igraph
+create_ontology_DAG_from_igraph = function(g, relations = NULL, verbose = simona_opt$verbose) {
+	edges = get.edgelist(g)
+
+	create_ontology_DAG(as.character(edges[, 1]), as.character(edges[, 2]), relations = relations, 
+		source = "igraph object", verbose = verbose)
+}
 

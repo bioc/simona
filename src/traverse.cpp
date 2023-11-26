@@ -10,8 +10,10 @@ void _add_parents(List lt_parents, int i_node, LogicalVector& l_ancestors) {
 	if(parents.size() > 0) {
 		for(int i = 0; i < parents.size(); i ++) {
 			int i_parent = parents[i] - 1;
-			l_ancestors[i_parent] = true;
-			_add_parents(lt_parents, i_parent, l_ancestors);
+			if(!l_ancestors[i_parent]) {
+				l_ancestors[i_parent] = true;
+				_add_parents(lt_parents, i_parent, l_ancestors);
+			}
 		}
 	}
 }
@@ -32,7 +34,7 @@ void _add_parents_within_background(List lt_parents, int i_node, LogicalVector& 
 		if(parents.size() > 0) {
 			for(int i = 0; i < parents.size(); i ++) {
 				int i_parent = parents[i] - 1;
-				if(l_background[i_parent]) {
+				if(l_background[i_parent] && !l_ancestors[i_parent]) {
 					l_ancestors[i_parent] = true;
 					_add_parents_within_background(lt_parents, i_parent, l_ancestors, l_background);
 				}
@@ -86,8 +88,10 @@ void _add_children(List lt_children, int i_node, LogicalVector& l_offspring) {
 	if(children.size() > 0) {
 		for(int i = 0; i < children.size(); i ++) {
 			int i_child = children[i] - 1;
-			l_offspring[i_child] = true;
-			_add_children(lt_children, i_child, l_offspring);
+			if(!l_offspring[i_child]) {
+				l_offspring[i_child] = true;
+				_add_children(lt_children, i_child, l_offspring);
+			}
 		}
 	}
 }
@@ -106,7 +110,7 @@ void _add_children_within_background(List lt_children, int i_node, LogicalVector
 		if(children.size() > 0) {
 			for(int i = 0; i < children.size(); i ++) {
 				int i_child = children[i] - 1;
-				if(l_background[i_child]) {
+				if(l_background[i_child] && !l_offspring[i_child]) {
 					l_offspring[i_child] = true;
 					_add_children_within_background(lt_children, i_child, l_offspring, l_background);
 				}
@@ -335,7 +339,7 @@ IntegerVector cpp_n_offspring_on_tree(S4 dag, bool include_self = false) {
 	int n = lt_children.size();
 	IntegerVector num(n, 0);
 
-	for(int i_depth = max_depth-1; i_depth >= 0; i_depth --) {
+	for(int i_depth = max_depth; i_depth >= 0; i_depth --) {
 
 		for(int i = 0; i < n; i ++) {
 			if(depth[i] == i_depth) {
@@ -403,11 +407,43 @@ IntegerVector cpp_n_leaves(S4 dag) {
 			num[i] = sum(l_leaf);
 
 			reset_logical_vector_to_false(l_leaf);
+		} else {
+			num[i] = 1;
 		}
 	}
 	return num;
 }
 
+// [[Rcpp::export]]
+IntegerVector cpp_n_leaves_on_tree(S4 dag) {
+	
+	// faster than treating it as a DAG
+	List lt_children = dag.slot("lt_children");
+	IntegerVector depth = _dag_depth(dag);
+
+	int max_depth = max(depth);
+
+	int n = lt_children.size();
+	IntegerVector num(n, 0);
+
+	for(int i_depth = max_depth; i_depth >= 0; i_depth --) {
+
+		for(int i = 0; i < n; i ++) {
+			if(depth[i] == i_depth) {
+				IntegerVector children = lt_children[i];
+				if(children.size() == 0) {
+					num[i] = 1;
+				} else {
+					for(int j = 0; j < children.size(); j ++) {
+						num[ i ] += num[ children[j]-1 ];
+					}
+				}
+			}
+		}
+	}
+	
+	return num;
+}
 
 const int SET_UNION = 1;
 const int SET_INTERSECT = 2;
@@ -531,6 +567,38 @@ IntegerVector cpp_offspring_of_a_group(S4 dag, IntegerVector nodes, bool include
 		aid = aid + 1;
 	}
 	return aid;
+}
+
+// [[Rcpp::export]]
+NumericVector cpp_offspring_aggregate(S4 dag, NumericVector value, int method = 1) {
+	int n = dag.slot("n_terms");
+	List lt_children = dag.slot("lt_children");
+
+	NumericVector s(n);
+	LogicalVector l_offspring(n);
+	NumericVector v2;
+	for(int i = 0; i < n; i ++) {
+		if(i % 1000 == 0) {
+			message("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b", false);
+			message("going through " + std::to_string(i) + " / " + std::to_string(n) + " terms ...", false);
+		}
+
+		_find_offspring(lt_children, i, l_offspring, true);
+		v2 = value[l_offspring];
+		if(method == 1) {  // mean
+			s[i] = sum(v2)/sum(l_offspring);
+		} else {   // sum
+			s[i] = sum(v2);
+		}
+
+		reset_logical_vector_to_false(l_offspring);
+	}
+
+	message("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b", false);
+	message("going through " + std::to_string(n) + " / " + std::to_string(n) + " terms ... Done.", true);
+
+
+	return s;
 }
 
 
@@ -807,7 +875,6 @@ void _go_child(List lt_children, int node, IntegerVector path, CharacterVector t
 				}
 				path2.push_back(node);
 				cyclic_paths.push_back(path2);
-				Rcout << path2 << "\n";
 
 				if(cyclic_paths.size() > 1000) {
 					stop("Too many cyclic paths (> 1000).");

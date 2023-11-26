@@ -143,8 +143,12 @@ n_offspring = function(dag, terms = NULL, use_cache = TRUE, include_self = FALSE
 	}
 
 	if(!is.null(terms)) {
-		i = term_to_node_id(dag, terms)
-		n[i]
+		if(is.numeric(terms)) {
+			n[terms]
+		} else {
+			id = term_to_node_id(dag, terms, add_name = TRUE)
+			n[id[terms]]
+		}
 	} else {
 		n
 	}
@@ -169,26 +173,38 @@ n_ancestors = function(dag, terms = NULL, use_cache = TRUE, include_self = FALSE
 	}
 
 	if(!is.null(terms)) {
-		i = term_to_node_id(dag, terms)
-		n[i]
+		if(is.numeric(terms)) {
+			n[terms]
+		} else {
+			id = term_to_node_id(dag, terms, add_name = TRUE)
+			n[id[terms]]
+		}
 	} else {
 		n
 	}
 }
 
 #' @rdname n_terms
-#' @details For `n_connected_leaves()`, leaf nodes have value of zero, so you can identify leaf terms based on the values.
+#' @details For `n_connected_leaves()`, leaf nodes have value of 1.
 #' @export
 n_connected_leaves = function(dag, terms = NULL, use_cache = TRUE) {
 	if(is.null(dag@term_env$n_leaves) || !use_cache) {
-		dag@term_env$n_leaves = cpp_n_leaves(dag)
+		if(dag_is_tree(dag)) {
+			dag@term_env$n_leaves = cpp_n_leaves_on_tree(dag)
+		} else {
+			dag@term_env$n_leaves = cpp_n_leaves(dag)
+		}
 	}
 	n = dag@term_env$n_leaves
 	names(n) = dag@terms
 
 	if(!is.null(terms)) {
-		i = term_to_node_id(dag, terms)
-		n[i]
+		if(is.numeric(terms)) {
+			n[terms]
+		} else {
+			id = term_to_node_id(dag, terms, add_name = TRUE)
+			n[id[terms]]
+		}
 	} else {
 		n
 	}
@@ -196,13 +212,17 @@ n_connected_leaves = function(dag, terms = NULL, use_cache = TRUE) {
 
 #' @rdname n_terms
 #' @export
-n_parents = function(dag, terms = NULL, use_cache = TRUE) {
+n_parents = function(dag, terms = NULL) {
 	n = dag@term_env$n_parents
 	names(n) = dag@terms
 
 	if(!is.null(terms)) {
-		i = term_to_node_id(dag, terms)
-		n[i]
+		if(is.numeric(terms)) {
+			n[terms]
+		} else {
+			id = term_to_node_id(dag, terms, add_name = TRUE)
+			n[id[terms]]
+		}
 	} else {
 		n
 	}
@@ -210,16 +230,37 @@ n_parents = function(dag, terms = NULL, use_cache = TRUE) {
 
 #' @rdname n_terms
 #' @export
-n_children = function(dag, terms = NULL, use_cache = TRUE) {
+n_children = function(dag, terms = NULL) {
 	n = dag@term_env$n_children
 	names(n) = dag@terms
 
 	if(!is.null(terms)) {
-		i = term_to_node_id(dag, terms)
-		n[i]
+		if(is.numeric(terms)) {
+			n[terms]
+		} else {
+			id = term_to_node_id(dag, terms, add_name = TRUE)
+			n[id[terms]]
+		}
 	} else {
 		n
 	}
+}
+
+#' @details
+#' In `avg_parents()`, root term is removed.
+#' @rdname n_terms
+#' @export
+avg_parents = function(dag) {
+	mean(n_parents(dag)[-dag_root(dag, in_labels = FALSE)])
+   
+}
+
+#' @details
+#' In `avg_children()`, leaf term is removed.
+#' @rdname n_terms
+#' @export
+avg_children = function(dag) {
+	mean(n_children(dag)[-dag_leaves(dag, in_labels = FALSE)])
 }
 
 dag_ancestors_of_two_groups = function(dag, group1, group2, type = "union", in_labels = FALSE, include_self = FALSE) {
@@ -272,8 +313,12 @@ dag_depth = function(dag, terms = NULL, use_cache = TRUE) {
 	d = structure(dag@term_env$dag_depth, names = dag@terms)
 
 	if(!is.null(terms)) {
-		i = term_to_node_id(dag, terms)
-		d[i]
+		if(is.numeric(terms)) {
+			d[terms]
+		} else {
+			id = term_to_node_id(dag, terms, add_name = TRUE)
+			d[id[terms]]
+		}
 	} else {
 		d
 	}
@@ -289,8 +334,12 @@ dag_height = function(dag, terms = NULL, use_cache = TRUE) {
 	d = structure(dag@term_env$dag_height, names = dag@terms)
 
 	if(!is.null(terms)) {
-		i = term_to_node_id(dag, terms)
-		d[i]
+		if(is.numeric(terms)) {
+			d[terms]
+		} else {
+			id = term_to_node_id(dag, terms, add_name = TRUE)
+			d[id[terms]]
+		}
 	} else {
 		d
 	}
@@ -306,8 +355,12 @@ dag_shortest_dist_from_root = function(dag, terms = NULL, use_cache = TRUE) {
 	d = structure(dag@term_env$dag_dist_to_root, names = dag@terms)
 
 	if(!is.null(terms)) {
-		i = term_to_node_id(dag, terms)
-		d[i]
+		if(is.numeric(terms)) {
+			d[terms]
+		} else {
+			id = term_to_node_id(dag, terms, add_name = TRUE)
+			d[id[terms]]
+		}
 	} else {
 		d
 	}
@@ -323,8 +376,12 @@ dag_shortest_dist_to_leaves = function(dag, terms = NULL, use_cache = TRUE) {
 	d = structure(dag@term_env$dag_dist_to_leaves, names = dag@terms)
 
 	if(!is.null(terms)) {
-		i = term_to_node_id(dag, terms)
-		d[i]
+		if(is.numeric(terms)) {
+			d[terms]
+		} else {
+			id = term_to_node_id(dag, terms, add_name = TRUE)
+			d[id[terms]]
+		}
 	} else {
 		d
 	}
@@ -409,4 +466,40 @@ dag_longest_dist_from_ancestors = function(dag, to, terms = NULL, background = N
 dag_shortest_dist_from_ancestors = function(dag, to, terms = NULL, background = NULL) {
 	.dag_singular_dist(dag, to, terms, background, dist_type = "shortest", towards = "ancestors")
 }
+
+#####
+
+#' Distinct ancestors of a list of terms
+#' 
+#' For a given list of terms, it returns a subset of terms which have
+#' no ancestor relations to each other.
+#' 
+#' @param dag An `ontology_DAG` object.
+#' @param terms A vector of term names.
+#' @param in_labels Whether the terms are represented in their names or as integer indices?
+#' @param verbose Whether to print messages.
+#' 
+#' Consider a subgraph that contains `terms` and their offspring terms, induced from the complete DAG.
+#' the returned subset of terms are those with zero in-degree, or have no finite directional distance
+#' from others in the subgraph.
+#' 
+#' @return An integer vector or a character vector depending on the value of `in_labels`.
+#' @export
+#' @examples
+#' parents  = c("a", "a", "b", "b", "c", "d")
+#' children = c("b", "c", "c", "d", "e", "f")
+#' dag = create_ontology_DAG(parents, children)
+#' dag_distinct_ancestors(dag, c("c", "d", "e", "f"))
+dag_distinct_ancestors = function(dag, terms, in_labels = TRUE, verbose = simona_opt$verbose) {
+	dist = shortest_distances_directed(dag, terms, verbose = verbose)
+
+	ind = which(apply(dist, 2, function(x) all(x <= 0)))
+
+	if(in_labels) {
+		names(ind)
+	} else {
+		unname(ind)
+	}
+}
+
 

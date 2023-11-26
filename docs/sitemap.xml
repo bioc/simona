@@ -31,6 +31,9 @@
     <loc>/articles/v7_dag_visualization.html</loc>
   </url>
   <url>
+    <loc>/articles/v8_random.html</loc>
+  </url>
+  <url>
     <loc>/authors.html</loc>
   </url>
   <url>
@@ -52,6 +55,9 @@
     <loc>/reference/create_ontology_DAG_from_GO_db.html</loc>
   </url>
   <url>
+    <loc>/reference/create_ontology_DAG_from_igraph.html</loc>
+  </url>
+  <url>
     <loc>/reference/dag_all_terms.html</loc>
   </url>
   <url>
@@ -59,6 +65,9 @@
   </url>
   <url>
     <loc>/reference/dag_depth.html</loc>
+  </url>
+  <url>
+    <loc>/reference/dag_distinct_ancestors.html</loc>
   </url>
   <url>
     <loc>/reference/dag_enrich_items.html</loc>
@@ -74,6 +83,9 @@
   </url>
   <url>
     <loc>/reference/dag_longest_dist_to_offspring.html</loc>
+  </url>
+  <url>
+    <loc>/reference/dag_random.html</loc>
   </url>
   <url>
     <loc>/reference/dag_reorder.html</loc>

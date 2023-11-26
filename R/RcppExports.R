@@ -77,12 +77,24 @@ intersectToList_logical <- function(lt, x) {
     .Call(`_simona_intersectToList_logical`, lt, x)
 }
 
+cpp_partition_by_size <- function(tree, size) {
+    .Call(`_simona_cpp_partition_by_size`, tree, size)
+}
+
+cpp_random_aggregatioin <- function(size, value, perm) {
+    .Call(`_simona_cpp_random_aggregatioin`, size, value, perm)
+}
+
 cpp_node_pos_in_tree <- function(tree, bin_size, start = 1, end = 360) {
     .Call(`_simona_cpp_node_pos_in_tree`, tree, bin_size, start, end)
 }
 
 cpp_calc_n_neighbours <- function(x, range) {
     .Call(`_simona_cpp_calc_n_neighbours`, x, range)
+}
+
+cpp_reorder_by_score <- function(lt_children, score) {
+    .Call(`_simona_cpp_reorder_by_score`, lt_children, score)
 }
 
 cpp_get_force_counterpart <- function(lt_children_dag, lt_parents_dag, lt_children_tree, lt_parents_tree, root) {
@@ -205,6 +217,10 @@ cpp_n_leaves <- function(dag) {
     .Call(`_simona_cpp_n_leaves`, dag)
 }
 
+cpp_n_leaves_on_tree <- function(dag) {
+    .Call(`_simona_cpp_n_leaves_on_tree`, dag)
+}
+
 cpp_ancestors_of_a_group <- function(dag, nodes, type = 1L, include_self = FALSE) {
     .Call(`_simona_cpp_ancestors_of_a_group`, dag, nodes, type, include_self)
 }
@@ -215,6 +231,10 @@ cpp_ancestors_of_two_groups <- function(dag, nodes1, nodes2, type, include_self 
 
 cpp_offspring_of_a_group <- function(dag, nodes, include_self = FALSE) {
     .Call(`_simona_cpp_offspring_of_a_group`, dag, nodes, include_self)
+}
+
+cpp_offspring_aggregate <- function(dag, value, method = 1L) {
+    .Call(`_simona_cpp_offspring_aggregate`, dag, value, method)
 }
 
 cpp_is_reachable <- function(dag, nodes, directed = FALSE) {
