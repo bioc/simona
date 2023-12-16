@@ -25,6 +25,9 @@
 import_obo = function(file, relation_type = character(0), inherit_relations = TRUE, verbose = simona_opt$verbose, ...) {
 	
 	if(grepl("^(http|https|ftp)://.*\\.gz$", file)) {
+		op = getOption("timeout")
+		options(timeout = 999999999)
+		on.exit(options(timeout = op))
 		con = url(file)
 		con2 = gzcon(con)
 		ln = readLines(con2)
@@ -35,6 +38,9 @@ import_obo = function(file, relation_type = character(0), inherit_relations = TR
 		ln = readLines(con2)
 		close(con2)
 	} else if(grepl("^(http|https|ftp)://", file)) {
+		op = getOption("timeout")
+		options(timeout = 999999999)
+		on.exit(options(timeout = op))
 		con = url(file)
 		ln = readLines(con)
 		close(con)
@@ -141,6 +147,7 @@ import_obo = function(file, relation_type = character(0), inherit_relations = TR
 	
 	if(dag_root(dag) == SUPER_ROOT) {
 		term_meta$id[dag@root] = SUPER_ROOT
+		term_meta$name[dag@root] = SUPER_ROOT
 		term_meta$short_id[dag@root] = SUPER_ROOT
 	}
 
@@ -511,6 +518,7 @@ import_owl = function(file, relation_type = character(0), inherit_relations = TR
 	
 	if(dag_root(dag) == SUPER_ROOT) {
 		term_meta$id[dag@root] = SUPER_ROOT
+		term_meta$name[dag@root] = SUPER_ROOT
 		term_meta$short_id[dag@root] = SUPER_ROOT
 	}
 	
@@ -556,15 +564,18 @@ import_ontology = function(file, robot_jar = simona_opt$robot_jar, JAVA_ARGS = "
 	}
 
 	if(is.null(robot_jar)) {
-		stop("'robot.jar' has not been set. It can be downloaded from https://github.com/ontodev/robot/releases.")
+		stop_wrap("'robot.jar' has not been set. It can be downloaded from https://github.com/ontodev/robot/releases and set by simona_opt$robot_jar = ...")
 	}
 
 	if(!file.exists(robot_jar)) {
-		stop("Cannot find 'robot.jar'. It can be downloaded from https://github.com/ontodev/robot/releases.")
+		stop_wrap("Cannot find 'robot.jar'. It can be downloaded from https://github.com/ontodev/robot/releases and set by simona_opt$robot_jar = ...")
 	}
 	robot_jar = normalizePath(robot_jar)
 
 	if(grepl("^(http|ftp)", file)) {
+		op = getOption("timeout")
+		options(timeout = 999999999)
+		on.exit(options(timeout = op))
 		if(verbose) message(qq("Downloading @{file}..."))
 		file2 = tempfile(fileext = paste0("_", basename(file)))
 		download.file(file, destfile = file2, quiet = TRUE)
@@ -661,6 +672,7 @@ import_ttl = function(file, relation_type = "part_of", verbose = simona_opt$verb
 
 	if(dag_root(dag) == SUPER_ROOT) {
 		term_meta$id[dag@root] = SUPER_ROOT
+		term_meta$name[dag@root] = SUPER_ROOT
 		term_meta$short_id[dag@root] = SUPER_ROOT
 	}
 	

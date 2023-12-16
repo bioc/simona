@@ -267,7 +267,6 @@ dag_circular_viz = function(dag, highlight = NULL,
 
 	if(verbose) message("making plot...")
 
-
 	lgd_list = list()
 	if(!is.null(node_col_map)) {
 
@@ -279,10 +278,10 @@ dag_circular_viz = function(dag, highlight = NULL,
 				node_col_map = node_col_map[sector_width > 1]
 			}
 		}
-		if(length(node_col_map) > 20) {
-			n_offspring = n_offspring(dag)
-			node_col_map = node_col_map[ order(-n_offspring[names(node_col_map)])[seq_len(20)] ]
-		}
+		# if(length(node_col_map) > 20) {
+		# 	n_offspring = n_offspring(dag)
+		# 	node_col_map = node_col_map[ order(-n_offspring[names(node_col_map)])[seq_len(20)] ]
+		# }
 		if(is.null(legend_labels_from)) {
 			if("name" %in% colnames(mcols(dag))) {
 				legend_labels = mcols(dag)[names(node_col_map), "name"]
@@ -632,7 +631,20 @@ dag_as_DOT = function(dag, node_param = default_node_param,
 		""
 	)
 
-	paste(DOT, collapse = "\n")
+	dot = paste(DOT, collapse = "\n")
+	class(dot) = "print_source"
+	dot
+}
+
+#' Print the source
+#' 
+#' @param x An object in the `print_source` class.
+#' @param ... Other arguments.
+#' 
+#' @details
+#' Internally used.
+print.print_source = function(x, ...) {
+	cat(x)
 }
 
 #' @param ... Pass to [`DiagrammeR::grViz()`].

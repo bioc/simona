@@ -279,28 +279,8 @@ create_ontology_DAG = function(parents, children, relations = NULL, relations_DA
 	# pos has the same order as terms, but the value are the positions on `sorted`, i.e. the rank
 	dag@tpl_pos[tpl_order] = seq_len(n_terms)
 
-	if(!is.null(annotation)) {
-		annotation = lapply(annotation, as.character)
-		all_anno = unique(unlist(annotation))
-		n_all_anno = length(all_anno)
-		anno2ind = structure(seq_along(all_anno), names = all_anno)
-		annotation = lapply(annotation, function(x) unname(anno2ind[as.character(x)]))
-
-		n_terms = dag@n_terms
-		annotation2 = rep(list(integer(0)), n_terms)
-		term2ind = structure(seq_along(dag@terms), names = dag@terms)
-
-		cn = intersect(dag@terms, names(annotation))
-		if(length(cn) == 0) {
-			stop("No overlap between annotation names and terms.")
-		}
-		annotation2[ term2ind[cn] ] = annotation[cn]
-
-		dag@annotation = list(list = annotation2,
-			                  names = all_anno)
-	} else {
-		dag@annotation = list(list = vector("list", 0), names = character(0))
-	}
+	dag@annotation = list(list = vector("list", 0), names = character(0))
+	dag = add_annotation(dag, annotation)
 
 	depth = dag_depth(dag)
 	tb1 = table(depth)
@@ -331,6 +311,46 @@ create_ontology_DAG = function(parents, children, relations = NULL, relations_DA
 	}
 
 	return(dag)
+}
+
+singleton_ontology = function(term) {
+	ontology_DAG(
+		terms = term,
+		n_terms = 1L,
+		n_relations = 0L,
+		lt_parents = list(integer(0)),
+		lt_children = list(integer(0)),
+		source = "singleton",
+		root = 1L,
+		leaves = 1L,
+		term_env = new.env(parent = emptyenv())
+	)
+}
+
+add_annotation = function(dag, annotation) {
+	if(!is.null(annotation)) {
+		annotation = lapply(annotation, as.character)
+		all_anno = unique(unlist(annotation))
+		n_all_anno = length(all_anno)
+		anno2ind = structure(seq_along(all_anno), names = all_anno)
+		annotation = lapply(annotation, function(x) unname(anno2ind[as.character(x)]))
+
+		n_terms = dag@n_terms
+		annotation2 = rep(list(integer(0)), n_terms)
+		term2ind = structure(seq_along(dag@terms), names = dag@terms)
+
+		cn = intersect(dag@terms, names(annotation))
+		if(length(cn) == 0) {
+			stop("No overlap between annotation names and terms.")
+		}
+		annotation2[ term2ind[cn] ] = annotation[cn]
+
+		dag@annotation = list(list = annotation2,
+			                  names = all_anno)
+	} else {
+		dag@annotation = list(list = vector("list", 0), names = character(0))
+	}
+	dag
 }
 
 print_cyclic_paths = function(cyclic_paths, terms) {
@@ -373,18 +393,21 @@ setMethod("show",
 			cat("  Max depth:", max(depth), "\n")
 		}
 
-		if(n_terms == n_relations + 1) {
-			cat("  Aspect ratio: ", object@aspect_ratio[1], ":1\n", sep = "")
-		} else {
-			cat("  Avg number of parents: ", sprintf("%.2f", mean(n_parents(object)[-dag_root(object, in_labels = FALSE)])), "\n", sep = "")
-			cat("  Avg number of children: ", sprintf("%.2f", mean(n_parents(object)[-dag_leaves(object, in_labels = FALSE)])), "\n", sep = "")
-			cat("  Aspect ratio: ", object@aspect_ratio[1], ":1 (based on the longest distance from root)\n", sep = "")
-			cat("                ", object@aspect_ratio[2], ":1 (based on the shortest distance from root)\n", sep = "")
+		if(n_terms > 1) {
+			if(n_terms == n_relations + 1) {
+				cat("  Aspect ratio: ", object@aspect_ratio[1], ":1\n", sep = "")
+			} else {
+				cat("  Avg number of parents: ", sprintf("%.2f", mean(n_parents(object)[-dag_root(object, in_labels = FALSE)])), "\n", sep = "")
+				cat("  Avg number of children: ", sprintf("%.2f", mean(n_parents(object)[-dag_leaves(object, in_labels = FALSE)])), "\n", sep = "")
+				cat("  Aspect ratio: ", object@aspect_ratio[1], ":1 (based on the longest distance from root)\n", sep = "")
+				cat("                ", object@aspect_ratio[2], ":1 (based on the shortest distance from root)\n", sep = "")
+			}
 		}
 
 		if(length(object@lt_children_relations)) {
-			txt = strwrap(paste(attr(object@lt_children_relations, "levels"), collapse = ", "), width = 60)
-			txt[1] = paste0("  Relations: ", txt[1])
+			rel_levels = attr(object@lt_children_relations, "levels")
+			txt = strwrap(paste(rel_levels, collapse = ", "), width = 60)
+			txt[1] = paste0( "  Relations: ", txt[1])
 			txt[-1] = paste0("             ", txt[-1])
 			cat(txt, sep = "\n")
 
@@ -396,7 +419,10 @@ setMethod("show",
 		}
 
 		if(length(object@annotation$list)) {
-			cat("  Annotations are available.\n")
+			cat("  Annotations:", length(object@annotation$names), "items\n")
+			txt = strwrap(paste(c(object@annotation$names[seq_len(min(4, length(object@annotation$names)))], "..."), collapse = ", "), width = 60)
+			txt = paste0("               ", txt)
+			cat(txt, sep = "\n")
 		}
 
 		if(!is.null(object@elementMetadata)) {
@@ -666,11 +692,27 @@ setMethod("mcols<-",
 	}
 	
 	df = as.data.frame(value)
+
 	if(nrow(df) != x@n_terms) {
-		stop("value should be a table with the same number of rows as the number of terms in DAG.")
+		if(dag_root(x) == SUPER_ROOT) {
+			df2 = df[seq_len(nrow(df)+1), , drop = FALSE]
+			rownames(df2)[nrow(df2)] = SUPER_ROOT
+			
+			if(! (nrow(df) == x@n_terms - 1 || nrow(df) == x@n_terms) ) {
+				stop("value should be a table with the same number of rows as the number of terms in DAG.")
+			}
+
+			df = df2
+		} else {
+			if(nrow(df) != x@n_terms) {
+				stop("value should be a table with the same number of rows as the number of terms in DAG.")
+			}
+		}
 	}
 
-	x@elementMetadata = value
+	rownames(df) = x@terms
+
+	x@elementMetadata = df
 	invisible(x)
 })
 
@@ -704,3 +746,14 @@ create_ontology_DAG_from_igraph = function(g, relations = NULL, verbose = simona
 		source = "igraph object", verbose = verbose)
 }
 
+
+#' Whether the terms exist in the DAG
+#' 
+#' @param dag An `ontology_DAG` object.
+#' @param terms A vector of term IDs.
+#' 
+#' @return A logical vector.
+#' @export
+dag_has_terms = function(dag, terms) {
+	terms %in% dag@terms
+}
